@@ -1,9 +1,9 @@
-# HarmonyLang
+# Harmony
 
-**A tiny content-addressed language for the BEAM.** Every function is identified by a hash of what it does, not by its name. Deploys ship only the functions that changed, renames ship nothing, and every version stays runnable side by side.
+**Content-addressed functions for the BEAM.** Every function is identified by a hash of what it does, not by its name. Deploys ship only the functions that changed, renames ship nothing, and every version stays runnable side by side.
 
 > [!IMPORTANT]
-> HarmonyLang is a proof of concept inspired by [Unison](https://www.unison-lang.org/). The language is deliberately tiny so the code-identity and deployment model is easy to see. It is not a production language.
+> Harmony is a proof of concept inspired by [Unison](https://www.unison-lang.org/). Today it reads a deliberately tiny demo syntax so the code-identity and deployment model is easy to see. The goal is to hash ordinary compiled Elixir instead; see [Where it's going](#where-its-going).
 
 ## What it can do
 
@@ -21,7 +21,7 @@
 You need Elixir 1.18+ on OTP 27+.
 
 ```sh
-git clone https://github.com/leostera/HarmonyLang.git && cd HarmonyLang
+git clone https://github.com/leostera/harmony.git && cd harmony
 mix deps.get && mix test
 ```
 
@@ -71,9 +71,9 @@ Hello, Joe!
 
 `mix harmony.hash FILE` prints hashes without deploying. Every command takes `--store DIR` (default `.harmony`).
 
-## The language
+## The demo syntax
 
-Every function takes one binary, `input`, and returns a binary.
+Harmony's identity model doesn't depend on a language. The demo frontend reads a minimal syntax where every function takes one binary, `input`, and returns a binary.
 
 ```text
 -- comments start with two dashes
@@ -94,7 +94,7 @@ That's all of it. There are no recursive definitions yet, no other types, and no
 ## How it works
 
 1. **Parse** each `name = expr` line ([`Harmony.Syntax`](lib/harmony/syntax.ex)).
-2. **Resolve** names to hashes, callees first, and **hash** each body: SHA-256 over a versioned, canonical byte encoding in which a call is the callee's hash ([`Harmony.Codebase`](lib/harmony/codebase.ex)). The encoding is HarmonyLang's own, so hashes don't depend on the Erlang term format or compiler.
+2. **Resolve** names to hashes, callees first, and **hash** each body: SHA-256 over a versioned, canonical byte encoding in which a call is the callee's hash ([`Harmony.Codebase`](lib/harmony/codebase.ex)). The encoding is Harmony's own, so hashes don't depend on the Erlang term format or compiler.
 3. **Compile** each unique hash to one BEAM module, `harmony_<hash>`, exporting `run/1`. Calls compile to remote calls to the callee's hash module ([`Harmony.Object`](lib/harmony/object.ex)).
 4. **Deploy** into an append-only store ([`Harmony.Store`](lib/harmony/store.ex)):
 
@@ -123,15 +123,17 @@ libbeam loads a module group before an Isolate starts, so here a new release mea
 
 ## Limits
 
-- **The language is a toy.** Binary in, binary out, no recursion, no data types, no effects, no typechecker.
+- **The demo syntax is a toy.** Binary in, binary out, no recursion, no data types, no effects.
 - **One module per function** is the simplest mapping onto the BEAM, not an efficient one. Large programs would mean many tiny modules and atoms.
 - **No garbage collection.** Old objects stay in the store forever.
 - **No distribution.** Syncing stores between machines (sending a peer only the hashes it lacks) is the natural next step but isn't built.
 - **Trusted code only.** Hashes give identity and integrity, not safety.
 
-## Where it could go
+## Where it's going
 
-Mutual recursion (hash strongly connected components together, as Unison does), richer types, a codebase database with history instead of source files, store-to-store sync, and garbage collection of unreachable objects.
+Replace the demo syntax with ordinary Elixir: compile the project, then hash each function's Core Erlang after macro expansion, with calls replaced by callee hashes and recursive groups hashed together. Elixir modules are values (structs, protocols, exceptions, `apply/3`), so shipped modules keep their real names; hashes drive identity, diffs and deduplication, and each release runs in its own [libbeam](https://github.com/leostera/libbeam) Isolate.
+
+Also: store-to-store sync and garbage collection of unreachable objects.
 
 ## License
 

@@ -1,8 +1,8 @@
 defmodule Harmony do
   @moduledoc """
-  A tiny content-addressed language for the BEAM.
+  Content-addressed functions for the BEAM.
 
-  See `Harmony.Syntax` for the language, `Harmony.Codebase` for how functions
+  See `Harmony.Syntax` for the demo syntax, `Harmony.Codebase` for how functions
   are hashed, `Harmony.Store` for differential deploys, and `Harmony.Runtime`
   for running them.
   """

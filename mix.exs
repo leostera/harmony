@@ -6,7 +6,7 @@ defmodule Harmony.MixProject do
       app: :harmony,
       version: "0.1.0",
       elixir: "~> 1.18",
-      description: "A tiny content-addressed language for the BEAM",
+      description: "Content-addressed functions for the BEAM",
       deps: deps(),
       elixirc_paths: elixirc_paths()
     ]
