@@ -124,6 +124,8 @@ defmodule Harmony.Beam do
 
   defp compile_elixir(files) do
     out = Path.join(System.tmp_dir!(), "harmony-build-#{System.unique_integer([:positive])}")
+    # Elixir 1.18 doesn't create the output directory itself.
+    File.mkdir_p!(out)
 
     # Harmony reads debug info, and `mix test` turns it off by default.
     previous =
