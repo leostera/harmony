@@ -1,0 +1,4 @@
+/_build/
+/deps/
+/.harmony/
+erl_crash.dump

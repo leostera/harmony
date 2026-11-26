@@ -1,0 +1,5 @@
+-- Every function takes one binary, `input`, and returns a binary.
+punctuation = "!"
+greeting = "Hello, " ++ input ++ punctuation(input)
+main = greeting(input)
+health = "ok"

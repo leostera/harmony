@@ -1,0 +1,5 @@
+-- v3: rename `greeting` to `salute`. Only names move; no new code ships.
+punctuation = "!"
+salute = "Howdy, " ++ input ++ punctuation(input)
+main = salute(input)
+health = "ok"

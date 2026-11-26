@@ -1,0 +1,25 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { otp: "27", elixir: "1.18" }
+          - { otp: "28", elixir: "1.19" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix test
+      - name: Deploy the examples
+        run: |
+          for v in v1 v2 v3; do mix harmony.deploy examples/greeter/$v.hm; done
+          test "$(mix harmony.run main Joe)" = "Howdy, Joe!"
+          test "$(mix harmony.run main Joe --release 1)" = "Hello, Joe!"

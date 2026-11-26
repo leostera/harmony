@@ -1,0 +1,5 @@
+-- v2: change the greeting; punctuation and health are untouched.
+punctuation = "!"
+greeting = "Howdy, " ++ input ++ punctuation(input)
+main = greeting(input)
+health = "ok"
