@@ -10,14 +10,15 @@ defmodule Harmony.Runtime do
 
   alias Harmony.{Object, Release, Store}
 
-  @spec run(Path.t(), String.t(), binary(), pos_integer() | :head) ::
-          {:ok, binary()} | {:error, String.t()}
-  def run(store, name, input, release \\ :head) when is_binary(input) do
+  @doc "Calls `name` (such as `Greeter.main/1`) with `args` from a release."
+  @spec run(Path.t(), String.t(), [term()], pos_integer() | :head) ::
+          {:ok, term()} | {:error, String.t()}
+  def run(store, name, args, release \\ :head) when is_list(args) do
     with {:ok, release} <- Store.release(store, release),
          {:ok, hashes} <- Release.closure(release, name),
          {:ok, beams} <- Store.objects(store, hashes),
          :ok <- load(beams) do
-      call(Map.fetch!(release.names, name), input)
+      call(Map.fetch!(release.names, name), args)
     end
   end
 
@@ -40,9 +41,9 @@ defmodule Harmony.Runtime do
     end)
   end
 
-  @spec call(String.t(), binary()) :: {:ok, binary()} | {:error, String.t()}
-  def call(hash, input) do
-    {:ok, Object.module(hash).run(input)}
+  @spec call(String.t(), [term()]) :: {:ok, term()} | {:error, String.t()}
+  def call(hash, args) when is_list(args) do
+    {:ok, apply(Object.module(hash), :run, args)}
   rescue
     error -> {:error, Exception.message(error)}
   end

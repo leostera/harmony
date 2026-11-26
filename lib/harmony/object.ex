@@ -1,12 +1,12 @@
 defmodule Harmony.Object do
   @moduledoc "One content-addressed function and its compiled BEAM module."
 
-  @enforce_keys [:hash, :body, :dependencies, :beam]
-  defstruct [:hash, :body, :dependencies, :beam]
+  @enforce_keys [:hash, :arity, :dependencies, :beam]
+  defstruct [:hash, :arity, :dependencies, :beam]
 
   @type t :: %__MODULE__{
           hash: String.t(),
-          body: term(),
+          arity: arity(),
           dependencies: [String.t()],
           beam: binary()
         }
@@ -15,26 +15,19 @@ defmodule Harmony.Object do
   def module(hash), do: String.to_atom("harmony_" <> hash)
 
   @doc false
-  def compile(hash, body) do
+  def compile(hash, arity, clauses) do
     module = module(hash)
 
     forms = [
-      {:attribute, 1, :module, module},
-      {:attribute, 1, :export, [run: 1]},
-      {:function, 1, :run, 1, [{:clause, 1, [{:var, 1, :Input}], [], [expression(body)]}]}
+      {:attribute, 0, :module, module},
+      {:attribute, 0, :export, [run: arity]},
+      {:function, 0, :run, arity, clauses}
     ]
 
-    {:ok, ^module, beam} = :compile.forms(forms, [:binary, :deterministic, :no_debug_info])
-    beam
+    case :compile.forms(forms, [:binary, :deterministic, :no_debug_info, :return_errors]) do
+      {:ok, ^module, beam} -> beam
+      {:ok, ^module, beam, _warnings} -> beam
+      {:error, errors, _warnings} -> raise "could not compile #{hash}: #{inspect(errors)}"
+    end
   end
-
-  defp expression(:input), do: {:var, 1, :Input}
-  defp expression({:literal, bytes}), do: :erl_parse.abstract(bytes)
-
-  defp expression({:call, hash, argument}),
-    do:
-      {:call, 1, {:remote, 1, {:atom, 1, module(hash)}, {:atom, 1, :run}}, [expression(argument)]}
-
-  defp expression({:concat, parts}),
-    do: {:bin, 1, Enum.map(parts, &{:bin_element, 1, expression(&1), :default, [:binary]})}
 end

@@ -1,29 +1,37 @@
 defmodule Mix.Tasks.Harmony.Hash do
   use Mix.Task
   @shortdoc "Print each function's content hash"
-  @moduledoc "Usage: `mix harmony.hash FILE`"
+  @moduledoc """
+  Usage: `mix harmony.hash [PATH...]`
+
+  PATH is a `.beam` file, a directory of them (such as `ebin`), or an `.ex` or
+  `.erl` source. With no PATH, compiles the current Mix project and reads it.
+  """
 
   @impl true
-  def run([file]) do
-    codebase = Harmony.CLI.codebase!(file)
+  def run(paths) do
+    codebase = Harmony.CLI.codebase!(paths)
 
     for {name, hash} <- Enum.sort(codebase.names) do
       Mix.shell().info("#{Harmony.CLI.short(hash)}  #{name}")
     end
   end
-
-  def run(_), do: Mix.raise("Usage: mix harmony.hash FILE")
 end
 
 defmodule Mix.Tasks.Harmony.Deploy do
   use Mix.Task
   @shortdoc "Store new function objects and make a new release current"
-  @moduledoc "Usage: `mix harmony.deploy FILE [--store DIR]`"
+  @moduledoc """
+  Usage: `mix harmony.deploy [PATH...] [--store DIR]`
+
+  PATH is a `.beam` file, a directory of them (such as `ebin`), or an `.ex` or
+  `.erl` source. With no PATH, compiles the current Mix project and reads it.
+  """
 
   @impl true
   def run(args) do
-    {store, [file]} = Harmony.CLI.store!(args, "mix harmony.deploy FILE [--store DIR]")
-    codebase = Harmony.CLI.codebase!(file)
+    {store, paths} = Harmony.CLI.store!(args, "mix harmony.deploy [PATH...] [--store DIR]")
+    codebase = Harmony.CLI.codebase!(paths)
 
     case Harmony.Store.deploy(store, codebase) do
       {:ok, report} -> print(report)
@@ -55,6 +63,9 @@ defmodule Mix.Tasks.Harmony.Run do
   @moduledoc """
   Usage: `mix harmony.run NAME [INPUT] [--store DIR] [--release N] [--libbeam]`
 
+  NAME is a function such as `Greeter.main` or `:text.shout`; it is called
+  with one argument, INPUT, as a binary (default `""`).
+
   `--libbeam` runs the call in a fresh libbeam Isolate; it needs the project
   built with `HARMONY_LIBBEAM=1` and a native host.
   """
@@ -78,6 +89,7 @@ defmodule Mix.Tasks.Harmony.Run do
 
     store = Keyword.get(options, :store, ".harmony")
     release = Keyword.get(options, :release, :head)
+    name = if String.contains?(name, "/"), do: name, else: name <> "/1"
 
     result =
       if options[:libbeam] do
@@ -88,11 +100,12 @@ defmodule Mix.Tasks.Harmony.Run do
 
         runtime.run(store, name, input, release)
       else
-        Harmony.Runtime.run(store, name, input, release)
+        Harmony.Runtime.run(store, name, [input], release)
       end
 
     case result do
-      {:ok, output} -> Mix.shell().info(output)
+      {:ok, output} when is_binary(output) -> Mix.shell().info(output)
+      {:ok, output} -> Mix.shell().info(inspect(output))
       {:error, reason} -> Mix.raise(reason)
     end
   end
@@ -151,13 +164,15 @@ defmodule Harmony.CLI do
     end
   end
 
-  def codebase!(file) do
-    with {:ok, source} <- File.read(file),
-         {:ok, codebase} <- Harmony.Codebase.from_source(source) do
-      codebase
-    else
-      {:error, reason} when is_atom(reason) -> Mix.raise("#{file}: #{:file.format_error(reason)}")
-      {:error, reason} -> Mix.raise("#{file}: #{reason}")
+  def codebase!([]) do
+    Mix.Task.run("compile")
+    codebase!([Mix.Project.compile_path()])
+  end
+
+  def codebase!(paths) do
+    case Harmony.Codebase.from_paths(paths) do
+      {:ok, codebase} -> codebase
+      {:error, reason} -> Mix.raise(reason)
     end
   end
 

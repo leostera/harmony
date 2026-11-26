@@ -1,1 +1,1 @@
-[inputs: ["{mix,.formatter}.exs", "{lib,test,runtime}/**/*.{ex,exs}"]]
+[inputs: ["{mix,.formatter}.exs", "{lib,test,runtime,examples}/**/*.{ex,exs}"]]

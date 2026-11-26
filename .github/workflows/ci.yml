@@ -20,6 +20,8 @@ jobs:
       - run: mix test
       - name: Deploy the examples
         run: |
-          for v in v1 v2 v3; do mix harmony.deploy examples/greeter/$v.hm; done
-          test "$(mix harmony.run main Joe)" = "Howdy, Joe!"
-          test "$(mix harmony.run main Joe --release 1)" = "Hello, Joe!"
+          for v in v1 v2 v3; do mix harmony.deploy examples/greeter/$v; done
+          test "$(mix harmony.run Greeter.main Joe)" = "Howdy, Joe!"
+          test "$(mix harmony.run Greeter.main Joe --release 1)" = "Hello, Joe!"
+          mix harmony.deploy examples/mixed --store /tmp/mixed
+          test "$(mix harmony.run Shouter.main joe --store /tmp/mixed)" = "HEY JOE!"
