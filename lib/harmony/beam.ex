@@ -10,21 +10,30 @@ defmodule Harmony.Beam do
 
   Inputs can be `.beam` files, directories of them (such as `ebin`), or, for
   convenience, `.ex` and `.erl` sources, which are compiled to BEAM first.
+  Library modules are read the same way, from the code path.
   """
 
-  @type functions :: %{module() => [{atom(), arity(), [tuple()]}]}
+  @typedoc "A module's functions as Erlang abstract code, with records expanded."
+  @type code :: %{
+          functions: %{{atom(), arity()} => [tuple()]},
+          exports: MapSet.t({atom(), arity()}),
+          imports: %{{atom(), arity()} => module()},
+          native: boolean()
+        }
 
-  @spec read([Path.t()]) :: {:ok, functions()} | {:error, String.t()}
+  @type modules :: %{module() => code()}
+
+  @spec read([Path.t()]) :: {:ok, modules()} | {:error, String.t()}
   def read(paths) do
     with {:ok, files} <- expand(paths),
          {:ok, beams} <- beams(files) do
       Enum.reduce_while(beams, {:ok, %{}}, fn {origin, beam}, {:ok, acc} ->
-        case functions(beam) do
-          {:ok, module, _functions} when is_map_key(acc, module) ->
+        case code(beam) do
+          {:ok, module, _code} when is_map_key(acc, module) ->
             {:halt, {:error, "#{inspect(module)} is defined more than once (#{origin})"}}
 
-          {:ok, module, functions} ->
-            {:cont, {:ok, Map.put(acc, module, functions)}}
+          {:ok, module, code} ->
+            {:cont, {:ok, Map.put(acc, module, code)}}
 
           {:error, reason} ->
             {:halt, {:error, "#{origin}: #{reason}"}}
@@ -33,10 +42,9 @@ defmodule Harmony.Beam do
     end
   end
 
-  @doc "A module's functions as Erlang abstract code, with records expanded."
-  @spec functions(binary()) ::
-          {:ok, module(), [{atom(), arity(), [tuple()]}]} | {:error, String.t()}
-  def functions(beam) do
+  @doc "Reads a module's code from a BEAM binary or file."
+  @spec code(binary() | charlist()) :: {:ok, module(), code()} | {:error, String.t()}
+  def code(beam) do
     case :beam_lib.chunks(beam, [:debug_info]) do
       # Elixir writes `:none` and Erlang `{:none, options}` when it was off.
       {:ok, {module, [debug_info: {:debug_info_v1, _backend, none}]}}
@@ -45,17 +53,8 @@ defmodule Harmony.Beam do
 
       {:ok, {module, [debug_info: {:debug_info_v1, backend, data}]}} ->
         case backend.debug_info(:erlang_v1, module, data, []) do
-          {:ok, forms} ->
-            forms =
-              if Enum.any?(forms, &match?({:attribute, _, :record, _}, &1)),
-                do: :erl_expand_records.module(forms, []),
-                else: forms
-
-            {:ok, module,
-             for({:function, _, name, arity, clauses} <- forms, do: {name, arity, clauses})}
-
-          _ ->
-            {:error, "#{inspect(module)} has no Erlang abstract code in its debug info"}
+          {:ok, forms} -> {:ok, module, from_forms(forms)}
+          _ -> {:error, "#{inspect(module)} has no Erlang abstract code in its debug info"}
         end
 
       {:ok, {module, _}} ->
@@ -63,6 +62,72 @@ defmodule Harmony.Beam do
 
       {:error, :beam_lib, _} ->
         {:error, "not a BEAM file"}
+    end
+  end
+
+  defp from_forms(forms) do
+    forms =
+      if Enum.any?(forms, &match?({:attribute, _, :record, _}, &1)),
+        do: :erl_expand_records.module(forms, []),
+        else: forms
+
+    %{
+      functions:
+        Map.new(for {:function, _, name, arity, clauses} <- forms, do: {{name, arity}, clauses}),
+      exports:
+        MapSet.new(for {:attribute, _, :export, exports} <- forms, export <- exports, do: export),
+      imports:
+        Map.new(
+          for {:attribute, _, :import, {module, imports}} <- forms,
+              import <- imports,
+              do: {import, module}
+        ),
+      # Native code replaces these functions' bodies once the module loads.
+      native:
+        Enum.any?(
+          forms,
+          &match?({:attribute, _, attribute, _} when attribute in [:on_load, :nifs], &1)
+        )
+    }
+  end
+
+  @typedoc "Where a library module comes from."
+  @type library ::
+          {:ok, code(), md5 :: String.t()}
+          | {:unhashable, md5 :: String.t(), reason :: String.t()}
+          | :preloaded
+          | :missing
+
+  @doc """
+  Every module on the code path, by name: its BEAM file, or `:preloaded` for
+  modules built into the VM.
+  """
+  @spec available() :: %{module() => charlist() | :preloaded}
+  def available do
+    for {name, path, _loaded} <- :code.all_available(), into: %{} do
+      {List.to_atom(name), if(is_list(path), do: path, else: :preloaded)}
+    end
+  end
+
+  @doc "Reads a library module from the code path."
+  @spec library(module(), %{module() => charlist() | :preloaded}) :: library()
+  def library(module, available) do
+    case Map.get(available, module, :missing) do
+      :missing ->
+        :missing
+
+      :preloaded ->
+        :preloaded
+
+      path ->
+        {:ok, {^module, md5}} = :beam_lib.md5(path)
+        md5 = Base.encode16(md5, case: :lower)
+
+        case code(path) do
+          {:ok, ^module, %{native: true}} -> {:unhashable, md5, "is implemented natively"}
+          {:ok, ^module, code} -> {:ok, code, md5}
+          {:error, reason} -> {:unhashable, md5, reason}
+        end
     end
   end
 

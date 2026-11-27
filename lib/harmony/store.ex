@@ -18,6 +18,8 @@ defmodule Harmony.Store do
           previous: pos_integer() | nil,
           new_objects: [String.t()],
           reused_objects: [String.t()],
+          new_library_objects: non_neg_integer(),
+          pinned: non_neg_integer(),
           bytes_written: non_neg_integer(),
           changes: Release.changes()
         }
@@ -43,11 +45,17 @@ defmodule Harmony.Store do
            previous: previous,
            new_objects: new,
            reused_objects: reused,
+           new_library_objects: Enum.count(new, &library_only?(&1, codebase)),
+           pinned: map_size(codebase.pinned),
            bytes_written: Enum.sum(Enum.map(new, &byte_size(codebase.objects[&1].beam))),
            changes: Release.changes(old, release)
          }}
       end
     end
+  end
+
+  defp library_only?(hash, codebase) do
+    hash in Map.values(codebase.library) and hash not in Map.values(codebase.names)
   end
 
   @doc "Points HEAD at an existing release."

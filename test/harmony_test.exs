@@ -182,13 +182,6 @@ defmodule HarmonyTest do
       message
     end
 
-    test "only your modules and :erlang can be called" do
-      assert rejection("def f(x), do: Enum.reverse(x)") =~
-               "M.f/1 calls Enum.reverse/1, which is outside Harmony's subset"
-
-      assert rejection(~S'def f(x), do: "#{x}"') =~ "interpolate binaries only"
-    end
-
     test "module names can only be used to call functions" do
       assert rejection("def f(_), do: __MODULE__") =~ "uses the module M as a value"
       assert rejection("defstruct [:a]") =~ "uses the module M as a value"
@@ -200,10 +193,16 @@ defmodule HarmonyTest do
 
     test "every call must be defined" do
       # Elixir only warns about undefined remote calls; Harmony refuses them.
-      {message, _warning} =
-        ExUnit.CaptureIO.with_io(:stderr, fn -> rejection("def f(x), do: M.nope(x)") end)
+      for {call, callee} <- [
+            {"M.nope(x)", "M.nope/1"},
+            {"Enum.nope(x)", "Enum.nope/1"},
+            {"NoSuch.f(x)", "NoSuch.f/1"}
+          ] do
+        {message, _warning} =
+          ExUnit.CaptureIO.with_io(:stderr, fn -> rejection("def f(x), do: #{call}") end)
 
-      assert message =~ "M.f/1 calls M.nope/1, which isn't defined"
+        assert message =~ "M.f/1 calls #{callee}, which isn't defined"
+      end
     end
   end
 

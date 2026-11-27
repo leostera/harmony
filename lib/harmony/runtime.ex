@@ -6,6 +6,10 @@ defmodule Harmony.Runtime do
   new modules next to the old ones instead of replacing them, so a live node
   can switch releases without purging code: calls already running keep using
   the old hashes, and the next call through the name table uses the new ones.
+
+  Library functions Harmony couldn't hash are called by name, so before
+  loading, the runtime checks that this VM has the exact build of each such
+  module the release was hashed against.
   """
 
   alias Harmony.{Object, Release, Store}
@@ -16,10 +20,30 @@ defmodule Harmony.Runtime do
   def run(store, name, args, release \\ :head) when is_list(args) do
     with {:ok, release} <- Store.release(store, release),
          {:ok, hashes} <- Release.closure(release, name),
+         :ok <- check(Release.requirements(release, hashes)),
          {:ok, beams} <- Store.objects(store, hashes),
          :ok <- load(beams) do
       call(Map.fetch!(release.names, name), args)
     end
+  end
+
+  @doc "Checks this VM has each library module at the MD5 the release was built against."
+  @spec check([{module(), String.t()}]) :: :ok | {:error, String.t()}
+  def check(requirements) do
+    Enum.find_value(Enum.sort(requirements), :ok, fn {module, md5} ->
+      with {:module, ^module} <- Code.ensure_loaded(module),
+           ^md5 <- Base.encode16(module.module_info(:md5), case: :lower) do
+        nil
+      else
+        {:error, _} ->
+          {:error, "this release calls #{inspect(module)}, which this VM doesn't have"}
+
+        other ->
+          {:error,
+           "this release was built against #{inspect(module)} #{String.slice(md5, 0, 10)}, " <>
+             "but this VM has #{String.slice(other, 0, 10)}; deploy again from this VM"}
+      end
+    end)
   end
 
   @doc "Loads objects that aren't loaded yet. A hash-named module never needs replacing."

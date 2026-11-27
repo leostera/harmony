@@ -25,3 +25,6 @@ jobs:
           test "$(mix harmony.run Greeter.main Joe --release 1)" = "Hello, Joe!"
           mix harmony.deploy examples/mixed --store /tmp/mixed
           test "$(mix harmony.run Shouter.main joe --store /tmp/mixed)" = "HEY JOE!"
+          test "$(mix harmony.run Shouter.total 100 --store /tmp/mixed)" = "1 + ... + 100 = 5050"
+          mix harmony.deploy examples/words --store /tmp/words
+          test "$(mix harmony.run Words.main 'hello big world' --store /tmp/words)" = "Hello Big World"

@@ -1,13 +1,19 @@
 defmodule Harmony.Object do
-  @moduledoc "One content-addressed function and its compiled BEAM module."
+  @moduledoc """
+  One content-addressed function and its compiled BEAM module.
 
-  @enforce_keys [:hash, :arity, :dependencies, :beam]
-  defstruct [:hash, :arity, :dependencies, :beam]
+  `dependencies` are the hashes it calls. `requires` are the library modules
+  it calls by name (pinned), with the MD5 of the build it was hashed against.
+  """
+
+  @enforce_keys [:hash, :arity, :dependencies, :requires, :beam]
+  defstruct [:hash, :arity, :dependencies, :requires, :beam]
 
   @type t :: %__MODULE__{
           hash: String.t(),
           arity: arity(),
           dependencies: [String.t()],
+          requires: %{module() => md5 :: String.t()},
           beam: binary()
         }
 

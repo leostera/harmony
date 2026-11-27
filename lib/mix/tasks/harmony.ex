@@ -2,18 +2,40 @@ defmodule Mix.Tasks.Harmony.Hash do
   use Mix.Task
   @shortdoc "Print each function's content hash"
   @moduledoc """
-  Usage: `mix harmony.hash [PATH...]`
+  Usage: `mix harmony.hash [PATH...] [--library] [--pinned]`
 
   PATH is a `.beam` file, a directory of them (such as `ebin`), or an `.ex` or
   `.erl` source. With no PATH, compiles the current Mix project and reads it.
+
+  `--library` also prints the library functions hashed along with your code,
+  and `--pinned` the library functions called by name, with the reason.
   """
 
   @impl true
-  def run(paths) do
+  def run(args) do
+    {options, paths} = OptionParser.parse!(args, strict: [library: :boolean, pinned: :boolean])
     codebase = Harmony.CLI.codebase!(paths)
+    shell = Mix.shell()
 
     for {name, hash} <- Enum.sort(codebase.names) do
-      Mix.shell().info("#{Harmony.CLI.short(hash)}  #{name}")
+      shell.info("#{Harmony.CLI.short(hash)}  #{name}")
+    end
+
+    if codebase.library != %{} or codebase.pinned != %{} do
+      shell.info(
+        "\n#{map_size(codebase.library)} library functions hashed, " <>
+          "#{map_size(codebase.pinned)} pinned (called by name)"
+      )
+    end
+
+    if options[:library] do
+      for {name, hash} <- Enum.sort(codebase.library),
+          do: shell.info("#{Harmony.CLI.short(hash)}  #{name}")
+    end
+
+    if options[:pinned] do
+      for {name, reason} <- Enum.sort(codebase.pinned),
+          do: shell.info("pinned  #{name}: #{reason}")
     end
   end
 end
@@ -44,10 +66,22 @@ defmodule Mix.Tasks.Harmony.Deploy do
     from = if report.previous, do: " (was #{report.previous})", else: ""
     shell.info("Release #{report.release}#{from}")
 
+    from_libraries =
+      if report.new_library_objects > 0,
+        do: " (#{report.new_library_objects} from libraries)",
+        else: ""
+
     shell.info(
-      "  objects: #{length(report.new_objects)} new, #{length(report.reused_objects)} reused, " <>
-        "#{report.bytes_written} bytes written"
+      "  objects: #{length(report.new_objects)} new#{from_libraries}, " <>
+        "#{length(report.reused_objects)} reused, #{report.bytes_written} bytes written"
     )
+
+    if report.pinned > 0 do
+      shell.info(
+        "  pinned: #{report.pinned} library functions called by name " <>
+          "(mix harmony.hash --pinned lists them)"
+      )
+    end
 
     %{added: added, removed: removed, changed: changed, renamed: renamed} = report.changes
     for name <- added, do: shell.info("  + #{name}")
